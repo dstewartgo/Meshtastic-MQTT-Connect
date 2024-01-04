@@ -269,6 +269,38 @@ def on_message(client, userdata, msg):
     #     print(env)
 
 
+
+def encrypt_message(message_text, destination_id):
+    try:
+        # Convert key to bytes
+        key_bytes = base64.b64decode(key.encode('ascii'))
+
+        nonce_packet_id = random.getrandbits(64).to_bytes(8, "little")
+        nonce_destination = destination_id.to_bytes(8, "little")
+
+        # Put both parts into a single byte array.
+        nonce = nonce_packet_id + nonce_destination
+
+        if key == "AQ==":
+                key_bytes = default_key
+
+        # Encrypt the message using AES-CTR mode
+        cipher = Cipher(algorithms.AES(key_bytes), modes.CTR(nonce), backend=default_backend())
+        encryptor = cipher.encryptor()
+        encrypted_bytes = encryptor.update(message_text.encode("utf-8")) + encryptor.finalize()
+
+        # Create a mesh packet with the encrypted message
+        encoded_message = mesh_pb2.Data()
+        encoded_message.portnum = portnums_pb2.TEXT_MESSAGE_APP
+        encoded_message.payload = encrypted_bytes
+
+        return encoded_message
+
+    except Exception as e:
+        print(f"*** Encryption failed: {str(e)}")
+        return None
+
+
 # check for message id in db, ignore duplicates
 def message_exists(mp):
     if debug: print("message_exists")
@@ -356,6 +388,9 @@ def publish_message(destination_id):
     if message_text:
         encoded_message = mesh_pb2.Data()
         encoded_message.portnum = portnums_pb2.TEXT_MESSAGE_APP 
+
+        # encrypted_message = encrypt_message(encoded_message,destination_id)
+        # encoded_message.payload = encrypted_message
         encoded_message.payload = message_text.encode("utf-8")
 
         mesh_packet = mesh_pb2.MeshPacket()
@@ -708,16 +743,12 @@ def on_disconnect(client, userdata, rc):
         
 root = tk.Tk()
 root.title("Meshtastic MQTT Connect")
-# root.geometry("1200x850")
 
 message_log_frame = tk.Frame(root)
 message_log_frame.grid(row=0, column=0, padx=(5,0), pady=5, sticky=tk.NSEW)
 
 node_info_frame = tk.Frame(root)
 node_info_frame.grid(row=0, column=1, padx=(0,5), pady=5, sticky=tk.NSEW)
-
-
-
 
 root.grid_rowconfigure(0, weight=1)
 root.grid_columnconfigure(0, weight=1)
@@ -727,7 +758,6 @@ message_log_frame.grid_columnconfigure(1, weight=1)
 message_log_frame.grid_columnconfigure(2, weight=1)
 node_info_frame.grid_rowconfigure(0, weight=1)
 node_info_frame.grid_columnconfigure(0, weight=1)
-
 
 w = 1200 # ~width for the Tk root
 h = 900 # ~height for the Tk root
